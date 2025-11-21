@@ -1,0 +1,146 @@
+/*
+FRONTEND: index.html
+Replace YOUR_WEB_APP_URL with the URL you get when you deploy the Apps Script web app.
+*/
+
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Stock App - Personal</title>
+  <style>
+    body{font-family:system-ui,Arial;margin:12px}
+    input,button,select{padding:6px;margin:4px}
+    table{border-collapse:collapse;width:100%;margin-top:8px}
+    th,td{border:1px solid #ddd;padding:6px;text-align:left}
+    .row{display:flex;gap:8px;flex-wrap:wrap}
+  </style>
+</head>
+<body>
+  <h2>Stock App (Web) — Personal</h2>
+  <div>
+    <h3>Agregar producto</h3>
+    <div class="row">
+      <input id="pname" placeholder="Nombre">
+      <input id="psku" placeholder="SKU">
+      <input id="pstock" placeholder="Stock" type="number">
+      <input id="pmin" placeholder="Min stock" type="number">
+      <input id="pprice" placeholder="Precio" type="number">
+      <button id="addProd">Agregar</button>
+    </div>
+  </div>
+
+  <div>
+    <h3>Productos</h3>
+    <div id="products"></div>
+  </div>
+
+  <div>
+    <h3>Reservas</h3>
+    <div id="reservations"></div>
+  </div>
+
+  <div>
+    <h3>Ventas</h3>
+    <div id="sales"></div>
+  </div>
+
+<script>
+const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbzgq6qE16ZNtZuYKYJW92MeajiQXu7IzMYD2lRkHJ1PvTZRKFJfFRNLDgp9RyWXKI2z/exec';
+
+async function post(action, body){
+  const payload = Object.assign({}, body || {}, {action});
+  const res = await fetch(WEB_APP_URL, {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify(payload)
+  });
+  return res.json();
+}
+
+async function loadProducts(){
+  const r = await post('getProducts');
+  const list = Array.isArray(r)? r : r;
+  const container = document.getElementById('products');
+  if(!Array.isArray(list)) { container.innerText = JSON.stringify(list); return; }
+  let html = '<table><tr><th>Nombre</th><th>SKU</th><th>Stock</th><th>Min</th><th>Precio</th><th>Acciones</th></tr>';
+  list.forEach(p=>{
+    html += `<tr><td>${p.name}</td><td>${p.sku}</td><td>${p.stock}</td><td>${p.min_stock}</td><td>${p.price}</td><td>
+      <button onclick="showReserve('${p.id}','${p.name}',${p.stock})">Reservar</button>
+      <button onclick="showSell('${p.id}','${p.name}',${p.stock})">Vender</button>
+      <button onclick="editStock('${p.id}')">Editar stock</button>
+    </td></tr>`;
+  });
+  html += '</table>';
+  container.innerHTML = html;
+}
+
+function showReserve(id,name,stock){
+  const qty = prompt('Cantidad a reservar para '+name, '1');
+  if(!qty) return;
+  post('createReservation', {product_id:id, quantity: Number(qty), customer: 'Personal'}).then(res=>{ alert('Reserva creada'); loadProducts(); loadReservations(); });
+}
+
+function showSell(id,name,stock){
+  const qty = prompt('Cantidad a vender de '+name, '1');
+  if(!qty) return;
+  const price = prompt('Precio unitario', '0');
+  post('createSale', {product_id:id, quantity: Number(qty), price: Number(price)}).then(res=>{ alert('Venta registrada'); loadProducts(); loadSales(); });
+}
+
+function editStock(id){
+  const qty = prompt('Nuevo stock (número)', '0');
+  if(qty===null) return;
+  post('updateStock', {id:id, stock: Number(qty)}).then(r=>{ alert('Stock actualizado'); loadProducts(); });
+}
+
+async function loadReservations(){
+  const r = await post('getReservations');
+  const list = Array.isArray(r)? r : r;
+  const container = document.getElementById('reservations');
+  if(!Array.isArray(list)) { container.innerText = JSON.stringify(list); return; }
+  let html = '<table><tr><th>Producto</th><th>Cliente</th><th>Cantidad</th><th>Status</th><th>Acciones</th></tr>';
+  list.forEach(row=>{
+    html += `<tr><td>${row.product_id}</td><td>${row.customer}</td><td>${row.quantity}</td><td>${row.status}</td><td>`;
+    if(row.status=='active') html += `<button onclick="fulfillRes('${row.id}')">Marcar completa</button> <button onclick="cancelRes('${row.id}')">Cancelar</button>`;
+    html += '</td></tr>';
+  });
+  html += '</table>';
+  container.innerHTML = html;
+}
+
+function fulfillRes(id){ post('fulfillReservation', {id:id}).then(()=>{ alert('Reservación marcada como completada'); loadReservations(); loadProducts(); }); }
+function cancelRes(id){ post('cancelReservation', {id:id}).then(()=>{ alert('Reservación cancelada y stock restaurado'); loadReservations(); loadProducts(); }); }
+
+async function loadSales(){
+  const r = await post('getSales');
+  const list = Array.isArray(r)? r : r;
+  const container = document.getElementById('sales');
+  if(!Array.isArray(list)) { container.innerText = JSON.stringify(list); return; }
+  let html = '<table><tr><th>Producto</th><th>Cantidad</th><th>Precio</th><th>Fecha</th></tr>';
+  list.forEach(s=>{
+    html += `<tr><td>${s.product_id}</td><td>${s.quantity}</td><td>${s.price}</td><td>${s.created}</td></tr>`;
+  });
+  html += '</table>';
+  container.innerHTML = html;
+}
+
+// Add product
+document.getElementById('addProd').addEventListener('click', async ()=>{
+  const name = document.getElementById('pname').value;
+  const sku = document.getElementById('psku').value;
+  const stock = Number(document.getElementById('pstock').value||0);
+  const min = Number(document.getElementById('pmin').value||0);
+  const price = Number(document.getElementById('pprice').value||0);
+  const res = await post('addProduct', {name, sku, stock, min_stock: min, price});
+  alert('Producto agregado');
+  document.getElementById('pname').value=''; document.getElementById('psku').value=''; document.getElementById('pstock').value='';
+  loadProducts();
+});
+
+// init
+loadProducts(); loadReservations(); loadSales();
+</script>
+</body>
+</html>
