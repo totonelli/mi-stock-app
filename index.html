@@ -1,113 +1,332 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8" />
-  <title>Mi Stock App</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Mi Stock App — Carrito</title>
   <style>
-    body {
-        font-family: Arial, sans-serif;
-        max-width: 700px;
-        margin: 20px auto;
-        padding: 10px;
-    }
-    h2 {
-        margin-top: 40px;
-    }
-    input, button {
-        padding: 6px;
-        margin: 5px 0;
-    }
-    .product-card {
-        border: 1px solid #ccc;
-        padding: 10px;
-        margin: 8px 0;
-        border-radius: 5px;
-    }
+    :root { --maxw: 900px; }
+    body { font-family: Inter, "Segoe UI", Arial; max-width: var(--maxw); margin:20px auto; padding:12px; }
+    header{display:flex;justify-content:space-between;align-items:center}
+    h1{margin:0}
+    .row{display:flex;gap:8px;flex-wrap:wrap}
+    .card{border:1px solid #e2e2e2;padding:10px;border-radius:6px;margin:8px 0}
+    button{padding:6px 10px;border-radius:6px;border:1px solid #bbb;background:#fff;cursor:pointer}
+    .btn-primary{background:#0b74de;color:white;border:none}
+    input[type=number]{width:100px}
+    #products{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:8px}
+    .product-card{padding:10px;border:1px solid #ddd;border-radius:8px}
+    .small{font-size:0.9rem;color:#444}
+    #cart{margin-top:12px}
+    table{width:100%;border-collapse:collapse}
+    th,td{padding:6px;border-bottom:1px solid #eee;text-align:left}
+    .muted{color:#666;font-size:0.9rem}
+    .inline{display:inline-block}
+    .actions{display:flex;gap:6px;flex-wrap:wrap}
+    .badge{background:#f2f2f2;padding:4px 6px;border-radius:6px;font-size:0.8rem}
+    .center{display:flex;justify-content:center;align-items:center}
+    .hidden{display:none}
+    .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,0.35);display:flex;align-items:center;justify-content:center}
+    .modal{background:white;padding:16px;border-radius:8px;max-width:520px;width:95%}
   </style>
 </head>
 <body>
 
+<header>
   <h1>Mi Stock App</h1>
-
-  <h2>Agregar producto</h2>
-  <div>
-      <input id="name" placeholder="Nombre" /> <br>
-      <input id="sku" placeholder="SKU" /> <br>
-      <input id="stock" type="number" placeholder="Stock inicial" /> <br>
-      <input id="min_stock" type="number" placeholder="Stock mínimo" /> <br>
-      <input id="price" type="number" placeholder="Precio" /> <br>
-
-      <button id="btnAdd">Agregar</button>
+  <div class="row">
+    <button id="btnOpenAdd" class="btn-primary">Agregar producto (nuevo)</button>
+    <button id="btnReload">Recargar</button>
   </div>
+</header>
 
-  <h2>Productos</h2>
-  <button id="btnLoad">Recargar lista</button>
-  <div id="products"></div>
+<section class="card">
+  <h3>Productos</h3>
+  <div id="products" aria-live="polite"></div>
+</section>
+
+<section class="card" id="cartSection">
+  <h3>Carrito</h3>
+  <div id="cartEmpty" class="muted">No hay productos en el carrito.</div>
+  <div id="cart" class="hidden">
+    <table id="cartTable">
+      <thead><tr><th>Producto</th><th>Cant.</th><th>Precio/u</th><th>Subtotal</th><th></th></tr></thead>
+      <tbody></tbody>
+    </table>
+
+    <div class="row" style="justify-content:space-between;margin-top:8px">
+      <div class="muted">Total: $ <span id="cartTotal">0</span></div>
+      <div class="row">
+        <label class="inline small">Pagó?</label>
+        <select id="paidSelect">
+          <option value="yes">Sí</option>
+          <option value="no" selected>No</option>
+        </select>
+        <button id="btnCheckout" class="btn-primary">Vender / Confirmar</button>
+        <button id="btnClearCart">Vaciar carrito</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Modal: Add Product -->
+<div id="modalAdd" class="hidden" role="dialog" aria-modal="true">
+  <div class="modal-bg hidden center" id="bgAdd">
+    <div class="modal">
+      <h3>Agregar producto nuevo</h3>
+      <div class="row" style="flex-direction:column">
+        <input id="inp_name" placeholder="Nombre" />
+        <input id="inp_sku" placeholder="SKU (opcional)" />
+        <input id="inp_stock" type="number" placeholder="Stock inicial" />
+        <input id="inp_min" type="number" placeholder="Stock mínimo" />
+        <input id="inp_price" type="number" placeholder="Precio unitario" />
+      </div>
+      <div style="margin-top:8px" class="row">
+        <button id="btnAddProduct" class="btn-primary">Agregar</button>
+        <button id="btnCloseAdd">Cerrar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Add Stock -->
+<div id="modalStock" class="hidden">
+  <div class="modal-bg hidden center" id="bgStock">
+    <div class="modal">
+      <h3>Agregar stock</h3>
+      <div class="muted">Producto: <span id="stkProductName"></span></div>
+      <input id="stkQty" type="number" placeholder="Cantidad a agregar" />
+      <div style="margin-top:8px" class="row">
+        <button id="btnConfirmStock" class="btn-primary">Confirmar</button>
+        <button id="btnCancelStock">Cancelar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Simple toast -->
+<div id="toast" class="hidden" style="position:fixed;right:20px;bottom:20px;background:#222;color:white;padding:8px 12px;border-radius:6px"></div>
 
 <script>
-const URL = "https://script.google.com/macros/s/AKfycbyggNBrQoYly1zo4pAS1wTz3MrxWmahfYSKlg0biK7FIxYU62h-1Ze5XmIF4HVCgtYc/exec";
+/* ========== CONFIG ========== */
+const URL = "https://script.google.com/macros/s/AKfycbxsmzDPzwoQQ5fTIQwtuFVXRuL6hqFizk-h7qmzz6iYK7buEbrtbXwcMz0T9hHHks1k/exec";
 
-/* ===== Helper para POST ===== */
+/* ========== UTIL: post via FormData (no CORS preflight) ========== */
 async function post(action, data = {}) {
-    const form = new FormData();
-    form.append("action", action);
-
-    for (const key in data) {
-        form.append(key, data[key]);
-    }
-
-    const res = await fetch(URL, {
-        method: "POST",
-        body: form
-    });
-
-    return res.json();
+  const form = new FormData();
+  form.append("action", action);
+  for (const k in data) {
+    if (data[k] !== undefined && data[k] !== null) form.append(k, data[k]);
+  }
+  const res = await fetch(URL, { method: "POST", body: form });
+  return res.json();
 }
 
-/* ===== Agregar producto ===== */
-document.getElementById("btnAdd").onclick = async () => {
-    const data = {
-        name: document.getElementById("name").value,
-        sku: document.getElementById("sku").value,
-        stock: document.getElementById("stock").value,
-        min_stock: document.getElementById("min_stock").value,
-        price: document.getElementById("price").value
-    };
+/* ========== STATE ========== */
+let PRODUCTS = []; // array loaded from sheet
+let CART = [];     // { product_id, name, price, qty }
 
-    const r = await post("addProduct", data);
-    alert("Producto agregado ✔️ ID: " + r.id);
+/* ========== UI HELPERS ========== */
+function toast(msg, t=1800) {
+  const el = document.getElementById("toast");
+  el.textContent = msg; el.classList.remove("hidden");
+  setTimeout(()=> el.classList.add("hidden"), t);
+}
 
-    loadProducts();
+/* ========== LOAD PRODUCTS ========== */
+async function loadProducts(){
+  const container = document.getElementById("products");
+  container.innerHTML = "<div class='muted'>Cargando...</div>";
+  try {
+    const res = await post("getProducts");
+    if (!Array.isArray(res)) throw new Error("Respuesta inesperada");
+    PRODUCTS = res;
+    renderProductList();
+  } catch(err) {
+    console.error(err);
+    container.innerHTML = "<div class='muted'>Error al cargar productos</div>";
+  }
+}
+
+function renderProductList(){
+  const container = document.getElementById("products");
+  container.innerHTML = "";
+  PRODUCTS.forEach(p=>{
+    const div = document.createElement("div");
+    div.className = "product-card";
+
+    div.innerHTML = `
+      <div><strong>${p.name}</strong> <span class="muted">(${p.sku || ""})</span></div>
+      <div class="small">Stock: <span id="stock-${p.id}">${p.stock}</span> | Precio: $${p.price}</div>
+      <div class="actions" style="margin-top:8px">
+        <button data-action="addstock" data-id="${p.id}" data-name="${p.name}">+ Stock</button>
+        <button data-action="addcart" data-id="${p.id}">Agregar al carrito</button>
+        <span class="badge">ID: ${p.id}</span>
+      </div>
+    `;
+    container.appendChild(div);
+  });
+}
+
+/* ========== MODALES ========== */
+// Add product modal
+const modalAddBg = document.getElementById("bgAdd");
+document.getElementById("btnOpenAdd").onclick = ()=> {
+  modalAddBg.classList.remove("hidden");
+  document.getElementById("inp_name").focus();
+};
+document.getElementById("btnCloseAdd").onclick = ()=> modalAddBg.classList.add("hidden");
+
+document.getElementById("btnAddProduct").onclick = async ()=>{
+  const name = document.getElementById("inp_name").value.trim();
+  if(!name) return alert("Nombre requerido");
+  const payload = {
+    name,
+    sku: document.getElementById("inp_sku").value.trim(),
+    stock: Number(document.getElementById("inp_stock").value||0),
+    min_stock: Number(document.getElementById("inp_min").value||0),
+    price: Number(document.getElementById("inp_price").value||0)
+  };
+  const r = await post("addProduct", payload);
+  if (r && r.ok) {
+    toast("Producto creado");
+    modalAddBg.classList.add("hidden");
+    // reload
+    await loadProducts();
+  } else {
+    alert("Error creando producto");
+    console.error(r);
+  }
 };
 
-/* ===== Cargar productos ===== */
-async function loadProducts() {
-    const productsDiv = document.getElementById("products");
-    productsDiv.innerHTML = "<em>Cargando...</em>";
+// Add stock modal
+let pendingStockProduct = null;
+const modalStockBg = document.getElementById("bgStock");
+document.body.addEventListener("click", (ev)=>{
+  const btn = ev.target.closest("button[data-action]");
+  if(!btn) return;
+  const action = btn.getAttribute("data-action");
+  const id = btn.getAttribute("data-id");
+  if(action === "addstock"){
+    pendingStockProduct = PRODUCTS.find(x => x.id === id);
+    document.getElementById("stkProductName").textContent = pendingStockProduct.name;
+    document.getElementById("stkQty").value = 1;
+    modalStockBg.classList.remove("hidden");
+    document.getElementById("stkQty").focus();
+  } else if(action === "addcart"){
+    const product = PRODUCTS.find(x => x.id === id);
+    addToCart(product);
+  }
+});
 
-    const data = await post("getProducts");
+document.getElementById("btnCancelStock").onclick = ()=> modalStockBg.classList.add("hidden");
+document.getElementById("btnConfirmStock").onclick = async ()=>{
+  const qty = Number(document.getElementById("stkQty").value || 0);
+  if(!pendingStockProduct || qty === 0) return alert("Cantidad inválida");
+  // fetch current and update: we call updateStock with id and new stock value
+  // compute newStock = current + qty
+  const current = Number(pendingStockProduct.stock) || 0;
+  const newStock = current + qty;
+  const r = await post("updateStock", { id: pendingStockProduct.id, stock: newStock });
+  if(r && r.ok){
+    toast("Stock actualizado");
+    modalStockBg.classList.add("hidden");
+    await loadProducts();
+  } else {
+    alert("Error actualizando stock");
+    console.error(r);
+  }
+};
 
-    productsDiv.innerHTML = "";
-
-    data.forEach(p => {
-        const div = document.createElement("div");
-        div.className = "product-card";
-
-        div.innerHTML = `
-            <strong>${p.name}</strong> (${p.sku})<br>
-            Stock: ${p.stock} <br>
-            Precio: $${p.price} <br>
-            ID: <small>${p.id}</small>
-        `;
-
-        productsDiv.appendChild(div);
-    });
+/* ========== CART ========== */
+function addToCart(product){
+  const exists = CART.find(c=>c.product_id===product.id);
+  if(exists){
+    exists.qty = Number(exists.qty) + 1;
+  } else {
+    CART.push({ product_id: product.id, name: product.name, price: Number(product.price)||0, qty: 1 });
+  }
+  renderCart();
+  toast("Agregado al carrito");
 }
 
-document.getElementById("btnLoad").onclick = loadProducts;
+function renderCart(){
+  const cartEl = document.getElementById("cart");
+  const cartTableBody = document.querySelector("#cartTable tbody");
+  const cartEmpty = document.getElementById("cartEmpty");
+  if(CART.length === 0){
+    cartEl.classList.add("hidden"); cartEmpty.classList.remove("hidden");
+    return;
+  }
+  cartEl.classList.remove("hidden"); cartEmpty.classList.add("hidden");
+  cartTableBody.innerHTML = "";
+  let total = 0;
+  CART.forEach((item, idx)=>{
+    const subtotal = item.qty * item.price;
+    total += subtotal;
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${item.name}</td>
+      <td><input type="number" min="1" value="${item.qty}" data-idx="${idx}" class="cart-qty" /></td>
+      <td>$${item.price}</td>
+      <td>$${subtotal}</td>
+      <td><button data-idx="${idx}" class="remove-item">Quitar</button></td>
+    `;
+    cartTableBody.appendChild(tr);
+  });
+  document.getElementById("cartTotal").textContent = total;
+}
 
-// Cargar al abrir
+/* cart events (qty change / remove) */
+document.getElementById("cartTable").addEventListener("input", (ev)=>{
+  if(ev.target.classList.contains("cart-qty")){
+    const idx = Number(ev.target.getAttribute("data-idx"));
+    const v = Number(ev.target.value) || 1;
+    CART[idx].qty = v;
+    renderCart();
+  }
+});
+document.getElementById("cartTable").addEventListener("click", (ev)=>{
+  if(ev.target.classList.contains("remove-item")){
+    const idx = Number(ev.target.getAttribute("data-idx"));
+    CART.splice(idx,1);
+    renderCart();
+  }
+});
+
+document.getElementById("btnClearCart").onclick = ()=> { CART = []; renderCart(); };
+
+document.getElementById("btnCheckout").onclick = async ()=>{
+  if(CART.length === 0) return alert("Carrito vacío");
+  const paid = (document.getElementById("paidSelect").value === "yes");
+  // For each item, call createSale with product_id, quantity, price (if paid then real price else 0) and paid flag
+  try {
+    for(const item of CART){
+      const priceToSave = paid ? (item.price * item.qty) : 0;
+      // createSale expects: product_id, quantity, price
+      const r = await post("createSale", {
+        product_id: item.product_id,
+        quantity: item.qty,
+        price: priceToSave,
+        paid: paid ? "true" : "false"
+      });
+      if(!r || !r.ok) console.error("createSale error", r);
+      // reduce stock locally for UX (we will reload products)
+    }
+    toast("Ventas registradas");
+    CART = [];
+    renderCart();
+    await loadProducts();
+  } catch(err){
+    console.error(err);
+    alert("Error procesando venta");
+  }
+};
+
+/* ========== INIT ========== */
+document.getElementById("btnReload").onclick = loadProducts;
 loadProducts();
+
 </script>
 
 </body>
